@@ -1,0 +1,8 @@
+line-length = 110
+exclude = ["alembic/versions"]
+
+[lint]
+select = ["E", "F", "I"]
+
+[lint.isort]
+known-third-party = ["alembic"]
