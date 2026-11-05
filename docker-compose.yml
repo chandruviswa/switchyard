@@ -1,0 +1,75 @@
+x-app: &app
+  build: .
+  environment: &env
+    DATABASE_URL: postgresql+psycopg://switchyard:switchyard@db:5432/switchyard
+    REDIS_URL: redis://redis:6379/0
+    JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-dev-only-secret}
+    # Local only, so a webhook can point at the receiver container below.
+    WEBHOOK_ALLOW_PRIVATE_TARGETS: "1"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: switchyard
+      POSTGRES_PASSWORD: switchyard
+      POSTGRES_DB: switchyard
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U switchyard"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      retries: 20
+
+  migrate:
+    <<: *app
+    command: alembic upgrade head
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *app
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *app
+    command: celery -A switchyard.tasks worker --loglevel=info --concurrency=4
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    <<: *app
+    command: celery -A switchyard.tasks beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  # Answers every webhook with a 200 and prints it. Handy for trying things out.
+  receiver:
+    image: mendhak/http-https-echo:35
+    environment:
+      HTTP_PORT: 8080
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
