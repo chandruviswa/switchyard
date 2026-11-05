@@ -5,6 +5,8 @@ alembic==1.14.0
 psycopg[binary]==3.2.3
 redis==5.2.1
 celery==5.4.0
+# kombu's Redis transport imports this without declaring it as a dependency.
+packaging==24.2
 pyjwt==2.10.1
 argon2-cffi==23.1.0
 pydantic-settings==2.7.0
